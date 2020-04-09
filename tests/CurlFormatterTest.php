@@ -2,10 +2,10 @@
 
 namespace yiiunit\extensions\httpclient;
 
+use yii\httpclient\CurlFormatter;
 use yii\httpclient\Request;
-use yii\httpclient\UrlEncodedFormatter;
 
-class UrlEncodedFormatterTest extends TestCase
+class CurlFormatterTest extends TestCase
 {
     protected function setUp()
     {
@@ -16,18 +16,23 @@ class UrlEncodedFormatterTest extends TestCase
 
     public function testFormat()
     {
-        $request = new Request();
-        $request->setMethod('POST');
         $data = [
             'name1' => 'value1',
             'name2' => 'value2',
         ];
+        if (class_exists('\CURLFile')) {
+            $data['file1'] = new \CURLFile('/path/to/file1');
+            $data['file2'] = new \CURLFile('/path/to/file2');
+        }
+
+        $request = new Request();
+        $request->setMethod('POST');
         $request->setData($data);
 
-        $formatter = new UrlEncodedFormatter();
+        $formatter = new CurlFormatter();
         $formatter->format($request);
-        $this->assertEquals(http_build_query($data), $request->getContent());
-        $this->assertEquals('application/x-www-form-urlencoded; charset=UTF-8', $request->getHeaders()->get('Content-Type'));
+        $this->assertEquals($data, $request->getContent());
+        $this->assertEquals(null, $request->getHeaders()->get('Content-Type'));
     }
 
     /**
@@ -43,7 +48,7 @@ class UrlEncodedFormatterTest extends TestCase
         ];
         $request->setData($data);
 
-        $formatter = new UrlEncodedFormatter();
+        $formatter = new CurlFormatter();
         $formatter->format($request);
         $this->assertEmpty($request->getContent());
         $this->assertContains(http_build_query($data), $request->getFullUrl());
@@ -58,7 +63,7 @@ class UrlEncodedFormatterTest extends TestCase
         $request = new Request();
         $request->setMethod('head');
 
-        $formatter = new UrlEncodedFormatter();
+        $formatter = new CurlFormatter();
         $formatter->format($request);
         $this->assertNull($request->getContent());
     }
@@ -68,39 +73,11 @@ class UrlEncodedFormatterTest extends TestCase
         $request = new Request();
         $request->setMethod('POST');
 
-        $formatter = new UrlEncodedFormatter();
+        $formatter = new CurlFormatter();
         $formatter->format($request);
 
         $headers = $request->getHeaders();
 
         $this->assertEquals('0', $headers['content-length'][0]);
-    }
-
-    public function testFormatPutRequestWithInfileOption()
-    {
-        $fh = fopen(__DIR__ . '/test_file.txt', 'r');
-
-        $request = new Request();
-        $request->setMethod('PUT');
-        $request->setOptions([
-            CURLOPT_INFILE => $fh,
-            CURLOPT_INFILESIZE => filesize(__DIR__ . '/test_file.txt'),
-            CURLOPT_BINARYTRANSFER => true,
-            CURLOPT_PUT => 1,
-        ]);
-
-        $formatter = new UrlEncodedFormatter();
-        $formatter->format($request);
-
-        $headers = $request->getHeaders()->toArray();
-
-        $expectedHeaders = [
-            'content-type' =>
-                [
-                    0 => 'application/x-www-form-urlencoded; charset=UTF-8',
-                ],
-        ];
-
-        $this->assertEquals($expectedHeaders, $headers);
     }
 }

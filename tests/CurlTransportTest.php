@@ -2,6 +2,7 @@
 
 namespace yiiunit\extensions\httpclient;
 
+use yii\httpclient\Client;
 use yii\httpclient\CurlTransport;
 
 /**
@@ -61,5 +62,108 @@ class CurlTransportTest extends TransportTestCase
             CURLOPT_SSLCERTPASSWD => $options['sslPassphrase'],
         ];
         $this->assertEquals($expectedContextOptions, $contextOptions);
+    }
+
+    public function testPreparePostRequestWithEmptyBody()
+    {
+        $client = new Client([
+            'transport' => 'yii\httpclient\CurlTransport',
+        ]);
+        $request = $client->createRequest();
+        $request->setMethod('POST');
+        $request->setUrl('http://app.test/full/url');
+
+        $transport = $this->createClient()->getTransport();
+        $curlOptions = $this->invoke($transport, 'prepare', [$request]);
+
+        $expectedCurlOptions = [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_URL => 'http://app.test/full/url',
+            CURLOPT_HTTPHEADER => [
+                0 => 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
+                1 => 'Content-Length: 0',
+            ],
+        ];
+
+        $this->assertEquals($expectedCurlOptions, $curlOptions);
+    }
+
+    public function testPrepareRequestWithOptions()
+    {
+        $client = new Client([
+            'transport' => 'yii\httpclient\CurlTransport',
+        ]);
+        $request = $client->createRequest();
+        $request->setMethod('GET');
+        $request->setUrl('http://app.test/full/url');
+        $request->setOptions([
+            'maxRedirects' => 1,
+            CURLOPT_MAXCONNECTS => 1,
+        ]);
+
+        $transport = $this->createClient()->getTransport();
+        $curlOptions = $this->invoke($transport, 'prepare', [$request]);
+
+        $expectedCurlOptions = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_URL => 'http://app.test/full/url',
+            CURLOPT_HTTPHEADER => [],
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_MAXREDIRS => 1,
+            CURLOPT_MAXCONNECTS => 1,
+        ];
+
+        $this->assertEquals($expectedCurlOptions, $curlOptions);
+    }
+
+    public function testPrepareHeadRequestShouldNotHaveBody()
+    {
+        $client = new Client([
+            'transport' => 'yii\httpclient\CurlTransport',
+        ]);
+        $request = $client->createRequest();
+        $request->setMethod('HEAD');
+        $request->setUrl('http://app.test/full/url');
+
+        $transport = $this->createClient()->getTransport();
+        $curlOptions = $this->invoke($transport, 'prepare', [$request]);
+
+        $expectedCurlOptions = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_URL => 'http://app.test/full/url',
+            CURLOPT_HTTPHEADER => [
+                0 => 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
+                1 => 'Content-Length: 0',
+            ],
+            CURLOPT_CUSTOMREQUEST => 'HEAD',
+            CURLOPT_NOBODY => true,
+        ];
+
+        $this->assertEquals($expectedCurlOptions, $curlOptions);
+    }
+
+    public function testPrepareGetRequestWithOutputFile()
+    {
+        $client = new Client([
+            'transport' => 'yii\httpclient\CurlTransport',
+        ]);
+        $request = $client->createRequest();
+        $request->setMethod('GET');
+        $request->setUrl('http://app.test/full/url');
+        $request->setOutputFile('file_handle');
+
+        $transport = $this->createClient()->getTransport();
+        $curlOptions = $this->invoke($transport, 'prepare', [$request]);
+
+        $expectedCurlOptions = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_URL => 'http://app.test/full/url',
+            CURLOPT_HTTPHEADER => [],
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_FILE => 'file_handle'
+        ];
+
+        $this->assertEquals($expectedCurlOptions, $curlOptions);
     }
 }

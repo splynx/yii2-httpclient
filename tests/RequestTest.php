@@ -23,6 +23,50 @@ class RequestTest extends TestCase
         $this->assertEquals($url, $request->getUrl());
     }
 
+    public function testAddData()
+    {
+        $request = new Request([
+            'client' => new Client(),
+            'format' => Client::FORMAT_URLENCODED,
+            'method' => 'POST',
+        ]);
+
+        $data1 = [
+            'name1' => 'value1',
+        ];
+
+        $data2 = [
+            'name2' => 'value2',
+        ];
+
+        $data3 = [
+            'name3' => 'value3',
+        ];
+
+        $request->addData($data1);
+        $this->assertEquals($data1, $request->getData());
+        $request->addData($data2);
+        $this->assertEquals(array_merge($data1, $data2), $request->getData());
+        $request->prepare();
+        $request->addData($data3);
+        $this->assertEquals(array_merge($data1, $data2, $data3), $request->getData());
+    }
+
+    public function testAddFile()
+    {
+        $request = new Request();
+        $request->addFile('file1', __DIR__ . '/test_file.txt');
+        $expectedContent = [
+            'file1' =>
+                [
+                    'mimeType' => 'text/plain',
+                    'fileName' => 'test_file.txt',
+                    'content' => 'file content',
+                ],
+        ];
+        $this->assertEquals($expectedContent, $request->getContent());
+    }
+
     public function testSetupMethod()
     {
         $request = new Request();
@@ -159,7 +203,7 @@ Content-Type: application/x-www-form-urlencoded; charset=UTF-8
 
 name=value
 EOL;
-        $this->assertEquals($expectedResult, $request->toString());
+        $this->assertEqualsWithoutLE($expectedResult, $request->toString());
 
         // @see https://github.com/yiisoft/yii2-httpclient/issues/70
         $request = new Request([
@@ -227,7 +271,7 @@ EOL;
     }
 
     /**
-     * @depends testSetupUrl
+     * @depends      testSetupUrl
      * @dataProvider dataProviderGetFullUrl
      *
      * @param string $baseUrl
@@ -267,7 +311,7 @@ Content-Type: application/x-www-form-urlencoded; charset=UTF-8
 
 param1=value1
 EOL;
-        $this->assertEquals($expectedResult, $request->toString());
+        $this->assertEqualsWithoutLE($expectedResult, $request->toString());
 
         $data = [
             'param2' => 'value2',
@@ -280,7 +324,7 @@ Content-Type: application/x-www-form-urlencoded; charset=UTF-8
 
 param2=value2
 EOL;
-        $this->assertEquals($expectedResult, $request->toString());
+        $this->assertEqualsWithoutLE($expectedResult, $request->toString());
     }
 
     public function testMultiPartRequest()
@@ -320,41 +364,147 @@ EOL;
         $boundary = $matches[1];
         $parts = explode("--$boundary", $requestString);
         $this->assertCount(6, $parts);
-        $this->assertEquals(str_replace(PHP_EOL, "\r\n", <<<PART1
+        $expectedPart1 = <<<PART1
 
 Content-Disposition: form-data; name="data1"
 
 data1=123
 
-PART1
-        ), $parts[1]);
-        $this->assertEquals(str_replace(PHP_EOL, "\r\n", <<<PART2
+PART1;
+        $this->assertEqualsWithoutLE($expectedPart1, $parts[1]);
+        $expectedPart2 = <<<PART2
 
 Content-Disposition: form-data; name="data2"
 Content-Type: text/plain
 
 data2=456
 
-PART2
-        ), $parts[2]);
-        $this->assertEquals(str_replace(PHP_EOL, "\r\n", <<<PART2
+PART2;
+        $this->assertEqualsWithoutLE($expectedPart2, $parts[2]);
+        $expectedPart3 = <<<PART3
 
 Content-Disposition: form-data; name="data3"; filename="file1.txt"
 Content-Type: application/octet-stream
 
 file1
 
-PART2
-        ), $parts[3]);
-        $this->assertEquals(str_replace(PHP_EOL, "\r\n", <<<PART2
+PART3;
+        $this->assertEqualsWithoutLE($expectedPart3, $parts[3]);
+        $expectedPart4 = <<<PART4
 
 Content-Disposition: form-data; name="data4"; filename="file2.txt"
 Content-Type: text/plain
 
 file2
 
-PART2
-        ), $parts[4]);
+PART4;
+        $this->assertEqualsWithoutLE($expectedPart4, $parts[4]);
+    }
+
+    public function testMultiPartRequestWithParamsWithTheSameNames()
+    {
+        $request = new Request([
+            'client' => new Client([
+                'baseUrl' => '/api'
+            ]),
+            'method' => 'POST',
+        ]);
+
+        $request->addContent('x', '1');
+        $request->addContent('x', '2');
+        $request->addContent('y', '3');
+        $request->addContent('z', '4');
+        $this->assertCount(4, $request->getContent());
+
+        $request->prepare();
+
+        $requestString = $request->toString();
+        $this->assertTrue((bool)preg_match('~Content-Type: multipart/form-data; boundary=([\w-]+)\n.*\1~s', $requestString, $matches));
+        $boundary = $matches[1];
+        $parts = explode("--$boundary", $requestString);
+        $this->assertCount(6, $parts);
+        $expectedPart1 = <<<PART1
+
+Content-Disposition: form-data; name="x"
+
+1
+
+PART1;
+        $this->assertEqualsWithoutLE($expectedPart1, $parts[1]);
+        $expectedPart2 = <<<PART2
+
+Content-Disposition: form-data; name="x"
+
+2
+
+PART2;
+        $this->assertEqualsWithoutLE($expectedPart2, $parts[2]);
+        $expectedPart3 = <<<PART3
+
+Content-Disposition: form-data; name="y"
+
+3
+
+PART3;
+        $this->assertEqualsWithoutLE($expectedPart3, $parts[3]);
+        $expectedPart4 = <<<PART4
+
+Content-Disposition: form-data; name="z"
+
+4
+
+PART4;
+        $this->assertEqualsWithoutLE($expectedPart4, $parts[4]);
+    }
+
+    public function testMultiPartRequestWithFormInputs()
+    {
+        $request = new Request([
+            'client' => new Client([
+                'baseUrl' => '/api'
+            ]),
+            'method' => 'POST',
+        ]);
+
+        $formData = ['form' => [
+            'name1' => 'value1',
+            'name2' => 'value2',
+        ]];
+
+        $request->addContent('name', 'content');
+        $request->addData($formData);
+
+        $request->prepare();
+
+        $requestString = $request->toString();
+        $this->assertTrue((bool)preg_match('~Content-Type: multipart/form-data; boundary=([\w-]+)\n.*\1~s', $requestString, $matches));
+        $boundary = $matches[1];
+        $parts = explode("--$boundary", $requestString);
+        $this->assertCount(5, $parts);
+        $expectedPart1 = <<<PART1
+
+Content-Disposition: form-data; name="form[name1]"
+
+value1
+
+PART1;
+        $this->assertEqualsWithoutLE($expectedPart1, $parts[1]);
+        $expectedPart2 = <<<PART2
+
+Content-Disposition: form-data; name="form[name2]"
+
+value2
+
+PART2;
+        $this->assertEqualsWithoutLE($expectedPart2, $parts[2]);
+        $expectedPart3 = <<<PART3
+
+Content-Disposition: form-data; name="name"
+
+content
+
+PART3;
+        $this->assertEqualsWithoutLE($expectedPart3, $parts[3]);
     }
 
     /**

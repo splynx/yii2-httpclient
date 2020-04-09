@@ -11,12 +11,12 @@ use Yii;
 use yii\base\BaseObject;
 
 /**
- * UrlEncodedFormatter formats HTTP message as 'application/x-www-form-urlencoded'.
- *
- * @author Paul Klimov <klimov.paul@gmail.com>
- * @since 2.0
+ * CURLFormatter is used with CurlTransport to format the content of the request as an array
+ * with the field name as key and field data as value
+ * @see CURLOPT_POSTFIELDS
+ * @since 2.0.9
  */
-class UrlEncodedFormatter extends BaseObject implements FormatterInterface
+class CurlFormatter extends BaseObject implements FormatterInterface
 {
     /**
      * @var int URL encoding type.
@@ -28,11 +28,6 @@ class UrlEncodedFormatter extends BaseObject implements FormatterInterface
      *    This encoding type is required by OpenID and OAuth protocols.
      */
     public $encodingType = PHP_QUERY_RFC1738;
-    /**
-     * @var string the content charset. If not set, it will use the value of [[\yii\base\Application::charset]].
-     * @since 2.0.1
-     */
-    public $charset;
 
 
     /**
@@ -40,12 +35,11 @@ class UrlEncodedFormatter extends BaseObject implements FormatterInterface
      */
     public function format(Request $request)
     {
-        if (($data = $request->getData()) !== null) {
-            $content = http_build_query((array)$data, '', '&', $this->encodingType);
-        }
+        $data = $request->getData();
 
         if (strcasecmp('GET', $request->getMethod()) === 0) {
-            if (!empty($content)) {
+            if ($data !== null) {
+                $content = http_build_query((array)$data, '', '&', $this->encodingType);
                 $request->setFullUrl(null);
                 $url = $request->getFullUrl();
                 $url .= (strpos($url, '?') === false) ? '?' : '&';
@@ -55,14 +49,9 @@ class UrlEncodedFormatter extends BaseObject implements FormatterInterface
             return $request;
         }
 
-        $charset = $this->charset === null ? Yii::$app->charset : $this->charset;
-        $request->getHeaders()->set('Content-Type', 'application/x-www-form-urlencoded; charset=' . $charset);
-
-        if (isset($content)) {
-            $request->setContent($content);
-        }
-
-        if (!isset($content) && !isset($request->getOptions()[CURLOPT_INFILE])) {
+        if ($data !== null) {
+            $request->setContent($data);
+        } else {
             $request->getHeaders()->set('Content-Length', '0');
         }
 
